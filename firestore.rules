@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isMessAdmin(messId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/messes/$(messId)).data.adminId == request.auth.uid;
+    }
+
+    function getMemberDoc(messId) {
+      return get(/databases/$(database)/documents/messes/$(messId)/members/$(request.auth.uid));
+    }
+
+    function isActiveMember(messId) {
+      return isAuthenticated() && (
+        isMessAdmin(messId) ||
+        (exists(/databases/$(database)/documents/messes/$(messId)/members/$(request.auth.uid)) &&
+         getMemberDoc(messId).data.status == 'ACTIVE')
+      );
+    }
+
+    function isAdminOrManager(messId) {
+      return isAuthenticated() && (
+        isMessAdmin(messId) ||
+        (exists(/databases/$(database)/documents/messes/$(messId)/members/$(request.auth.uid)) &&
+         getMemberDoc(messId).data.status == 'ACTIVE' &&
+         (getMemberDoc(messId).data.role == 'ADMIN' || getMemberDoc(messId).data.role == 'MANAGER'))
+      );
+    }
+
+    function isMessAdminOrAdminMember(messId) {
+      return isAuthenticated() && (
+        isMessAdmin(messId) ||
+        (exists(/databases/$(database)/documents/messes/$(messId)/members/$(request.auth.uid)) &&
+         getMemberDoc(messId).data.role == 'ADMIN')
+      );
+    }
+
+    // 1. Users: Read allowed for phone lookup & profile sync; write only by owner
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+
+    // 2. Collection Group rule: Allows signed-in user to query their own memberships across all messes
+    match /{path=**}/members/{memberId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        request.auth.uid == memberId
+      );
+    }
+
+    // 3. Separate Invite Codes: Top-level document mapping invite code to messId
+    // Allows non-members to look up messId without having read access to messes/{messId}
+    match /inviteCodes/{code} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // 4. Messes: Read is STRICTLY LIMITED TO MEMBERS
+    match /messes/{messId} {
+      allow read: if isAuthenticated() && (
+        resource.data.adminId == request.auth.uid ||
+        exists(/databases/$(database)/documents/messes/$(messId)/members/$(request.auth.uid))
+      );
+      
+      allow create: if isAuthenticated() && request.resource.data.adminId == request.auth.uid;
+
+      // MANAGER may update a mess doc only if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentMonth','isClosed']);
+      // Only ADMIN may change adminId, inviteCode, name, or other mess fields.
+      allow update: if isAuthenticated() && (
+        isMessAdmin(messId) ||
+        (isAdminOrManager(messId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentMonth', 'isClosed']))
+      );
+      
+      allow delete: if isMessAdmin(messId);
+
+      // Members subcollection:
+      // - Account members: doc id == request.auth.uid
+      // - Managed members: random id, createdBy == request.auth.uid
+      // - Any signed-in user can create a PENDING join request for themselves.
+      // - Members update by MANAGER must not be able to set role to ADMIN or modify an ADMIN's doc.
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && (
+          isActiveMember(messId) ||
+          request.auth.uid == memberId ||
+          resource.data.userId == request.auth.uid ||
+          isMessAdmin(messId)
+        );
+
+        allow create: if isAuthenticated() && (
+          (request.auth.uid == memberId && request.resource.data.status == 'PENDING' && request.resource.data.userId == request.auth.uid) ||
+          (isMessAdmin(messId) && request.auth.uid == memberId && request.resource.data.role == 'ADMIN') ||
+          (isAdminOrManager(messId) && request.resource.data.type == 'MANAGED' && request.resource.data.createdBy == request.auth.uid)
+        );
+
+        allow update: if isAuthenticated() && (
+          isMessAdminOrAdminMember(messId) || (
+            isAdminOrManager(messId) &&
+            resource.data.role != 'ADMIN' &&
+            request.resource.data.role != 'ADMIN'
+          )
+        );
+
+        allow delete: if isAuthenticated() && (
+          isMessAdminOrAdminMember(messId) || (
+            isAdminOrManager(messId) &&
+            resource.data.role != 'ADMIN'
+          )
+        );
+      }
+
+      // Meals: Active members can read; Manager or member can write own meal
+      match /meals/{mealId} {
+        allow read: if isActiveMember(messId);
+        allow create, update: if isAdminOrManager(messId) || (
+          isActiveMember(messId) && request.resource.data.memberId == request.auth.uid
+        );
+        allow delete: if isAdminOrManager(messId);
+      }
+
+      // Expenses (Bazar): Active members can read; only ADMIN/MANAGER can write
+      match /expenses/{expenseId} {
+        allow read: if isActiveMember(messId);
+        allow create, update, delete: if isAdminOrManager(messId);
+      }
+
+      // Deposits: Active members can read; only ADMIN/MANAGER can write
+      match /deposits/{depositId} {
+        allow read: if isActiveMember(messId);
+        allow create, update, delete: if isAdminOrManager(messId);
+      }
+
+      // Fixed Costs: Active members can read; only ADMIN/MANAGER can write
+      match /fixedCosts/{costId} {
+        allow read: if isActiveMember(messId);
+        allow create, update, delete: if isAdminOrManager(messId);
+      }
+
+      // Monthly Closings: Active members can read; only ADMIN/MANAGER can write
+      match /closings/{closingId} {
+        allow read: if isActiveMember(messId);
+        allow create, update, delete: if isAdminOrManager(messId);
+      }
+    }
+  }
+}

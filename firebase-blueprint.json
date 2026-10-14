@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MealManagerSchema",
+  "description": "Hardened Firestore Data Schema for Meal Manager Bangladesh with Firebase Email/Password Auth",
+  "collections": {
+    "users": {
+      "path": "users/{userId}",
+      "description": "User profile document without credentials. Document ID is Firebase Auth UID.",
+      "fields": {
+        "id": { "type": "string" },
+        "phone": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "inviteCodes": {
+      "path": "inviteCodes/{code}",
+      "description": "Document mapping unique invite codes to messId, enabling mess lookup without global mess read permissions",
+      "fields": {
+        "code": { "type": "string" },
+        "messId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "messes": {
+      "path": "messes/{messId}",
+      "description": "Mess entity with inviteCode and adminId",
+      "fields": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "adminId": { "type": "string" },
+        "cutoffHour": { "type": "number" },
+        "currentMonth": { "type": "string" },
+        "isClosed": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "subcollections": {
+        "members": {
+          "path": "messes/{messId}/members/{memberId}",
+          "description": "Member document. Account members have id == userId == Firebase UID. Managed members have random id and createdBy == admin UID.",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "userId": { "type": ["string", "null"] },
+            "name": { "type": "string" },
+            "phone": { "type": ["string", "null"] },
+            "role": { "type": "string" },
+            "type": { "type": "string" },
+            "status": { "type": "string" },
+            "joinDate": { "type": "string" },
+            "leaveDate": { "type": ["string", "null"] },
+            "openingBalance": { "type": "number" },
+            "createdBy": { "type": ["string", "null"] }
+          }
+        },
+        "meals": {
+          "path": "messes/{messId}/meals/{mealId}",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "memberId": { "type": "string" },
+            "date": { "type": "string" },
+            "breakfast": { "type": "number" },
+            "lunch": { "type": "number" },
+            "dinner": { "type": "number" },
+            "guestMeals": { "type": "number" },
+            "note": { "type": "string" },
+            "updatedAt": { "type": "number" }
+          }
+        },
+        "expenses": {
+          "path": "messes/{messId}/expenses/{expenseId}",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "buyerMemberId": { "type": "string" },
+            "date": { "type": "string" },
+            "amount": { "type": "number" },
+            "category": { "type": "string" },
+            "note": { "type": "string" },
+            "createdAt": { "type": "number" }
+          }
+        },
+        "deposits": {
+          "path": "messes/{messId}/deposits/{depositId}",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "memberId": { "type": "string" },
+            "date": { "type": "string" },
+            "amount": { "type": "number" },
+            "paymentMethod": { "type": "string" },
+            "note": { "type": "string" },
+            "createdAt": { "type": "number" }
+          }
+        },
+        "fixedCosts": {
+          "path": "messes/{messId}/fixedCosts/{costId}",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "title": { "type": "string" },
+            "category": { "type": "string" },
+            "amount": { "type": "number" },
+            "month": { "type": "string" },
+            "splitType": { "type": "string" },
+            "createdAt": { "type": "number" }
+          }
+        },
+        "closings": {
+          "path": "messes/{messId}/closings/{closingId}",
+          "fields": {
+            "id": { "type": "string" },
+            "messId": { "type": "string" },
+            "month": { "type": "string" },
+            "totalBazar": { "type": "number" },
+            "totalMeals": { "type": "number" },
+            "mealRate": { "type": "number" },
+            "totalFixedCosts": { "type": "number" },
+            "closedAt": { "type": "number" }
+          }
+        }
+      }
+    }
+  }
+}

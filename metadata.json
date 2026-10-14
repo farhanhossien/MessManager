@@ -1,0 +1,6 @@
+{
+  "name": "Meal Manager",
+  "description": "Bachelor mess and hostel meal manager in Bangladesh with daily meal tracking, bazar expenses, deposits, and accounting in BDT.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

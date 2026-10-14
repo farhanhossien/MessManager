@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Plate / Tray Base -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M26,64 C26,75.04 38.53,84 54,84 C69.47,84 82,75.04 82,64 L26,64 Z" />
+    <!-- Cloche / Food Cover -->
+    <path
+        android:fillColor="#E0F2FE"
+        android:pathData="M54,28 C55.66,28 57,26.66 57,25 C57,23.34 55.66,22 54,22 C52.34,22 51,23.34 51,25 C51,26.66 52.34,28 54,28 Z M54,32 C37.43,32 24,45.43 24,60 L84,60 C84,45.43 70.57,32 54,32 Z" />
+    <!-- Fork & Spoon Accent / Taka Badge -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M54,42 C49.58,42 46,45.58 46,50 C46,54.42 49.58,58 54,58 C58.42,58 62,54.42 62,50 C62,45.58 58.42,42 54,42 Z M53,45 L55.5,45 C56.3,45 57,45.7 57,46.5 C57,47.3 56.3,48 55.5,48 L53,48 L53,50 L56,50 L56,51.5 L53,51.5 L53,55 L51.5,55 L51.5,45 L53,45 Z" />
+</vector>
