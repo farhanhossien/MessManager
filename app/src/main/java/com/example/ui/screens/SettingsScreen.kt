@@ -222,7 +222,8 @@ fun SettingsScreen(
                     onClick = onLoadDemo,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(42.dp),
+                        .height(42.dp)
+                        .testTag("btn_load_demo"),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     shape = RoundedCornerShape(8.dp)
                 ) {

@@ -62,8 +62,6 @@ fun AuthScreen(
     isBangla: Boolean,
     onLogin: (phone: String, pin: String) -> Unit,
     onRegister: (name: String, phone: String, pin: String) -> Unit,
-    onSendPasswordReset: (phoneOrEmail: String) -> Unit,
-    onQuickDemo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Login, 1 = Register
@@ -72,8 +70,6 @@ fun AuthScreen(
     var pin by remember { mutableStateOf("") }
     var showPin by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showResetDialog by remember { mutableStateOf(false) }
-    var resetInput by remember { mutableStateOf("") }
 
     val scrollState = rememberScrollState()
 
@@ -240,6 +236,16 @@ fun AuthScreen(
                             errorMessage = if (isBangla) "পিন অবশ্যই ৬ ডিজিটের হতে হবে" else "PIN must be exactly 6 digits"
                             return@Button
                         }
+                        if (selectedTab == 1) {
+                            val isTrivial = pin.toSet().size == 1 ||
+                                (0 until 5).all { pin[it + 1] - pin[it] == 1 } ||
+                                (0 until 5).all { pin[it] - pin[it + 1] == 1 } ||
+                                pin in setOf("121212", "123123", "010101", "000000", "111111", "123456", "654321", "012345")
+                            if (isTrivial) {
+                                errorMessage = if (isBangla) "দুর্বল বা সাধারণ পিন গ্রহণযোগ্য নয় (যেমন: ১২৩৪৫৬, ০০০০০০)" else "Weak or trivial PIN is not allowed (e.g. 123456, 000000)"
+                                return@Button
+                            }
+                        }
                         if (selectedTab == 1 && name.isBlank()) {
                             errorMessage = if (isBangla) "আপনার নাম লিখুন" else "Please enter your name"
                             return@Button
@@ -266,30 +272,11 @@ fun AuthScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Forgot PIN / Reset Link Button & Notice
-                if (selectedTab == 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        TextButton(onClick = {
-                            resetInput = phone
-                            showResetDialog = true
-                        }) {
-                            Text(
-                                text = if (isBangla) "পিন ভুলে গেছেন? রিসেট করুন" else "Forgot PIN? Reset",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = AppStrings.t("forgot_pin_hint", isBangla),
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -297,67 +284,6 @@ fun AuthScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Quick Instant Test Button (Preloaded test credentials)
-        OutlinedButton(
-            onClick = onQuickDemo,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("quick_demo_button"),
-            shape = RoundedCornerShape(10.dp)
-        ) {
-            Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = if (isBangla) "১-ক্লিকে টেস্ট ইউজার লগইন (দ্রুত পরীক্ষার জন্য)" else "1-Click Quick Demo Login",
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp
-            )
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
-    }
-
-    // Password Reset Dialog
-    if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            title = { Text(if (isBangla) "পিন / পাসওয়ার্ড রিসেট" else "PIN / Password Reset") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = if (isBangla)
-                            "আপনার অ্যাকাউন্টের ফোন নম্বর বা ইমেইল দিন। এছাড়া মেসের অ্যাডমিন মেম্বার স্ক্রিন থেকে ওয়ান-টাইম পিন দিয়ে সরাসরি রিসেট করতে পারেন।"
-                        else
-                            "Enter your phone number or email. You can also ask your mess Admin to reset your PIN via Cloud Function from the Members screen."
-                    )
-                    OutlinedTextField(
-                        value = resetInput,
-                        onValueChange = { resetInput = it },
-                        label = { Text(if (isBangla) "ইমেইল বা ফোন" else "Email or Phone") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (resetInput.isNotBlank()) {
-                            onSendPasswordReset(resetInput)
-                            showResetDialog = false
-                        }
-                    }
-                ) {
-                    Text(if (isBangla) "লিংক পাঠান" else "Send Link")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
-                    Text(if (isBangla) "বাতিল" else "Cancel")
-                }
-            }
-        )
     }
 }

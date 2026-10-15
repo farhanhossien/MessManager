@@ -141,11 +141,6 @@ class MainActivity : ComponentActivity() {
                                 isBangla = isBangla,
                                 onLogin = { phone, pin -> viewModel.login(phone, pin) },
                                 onRegister = { name, phone, pin -> viewModel.register(name, phone, pin) },
-                                onSendPasswordReset = { viewModel.sendPasswordReset(it) },
-                                onQuickDemo = {
-                                    // 1-Click test user with 6-digit PIN
-                                    viewModel.register("ফারহান আহমেদ", "01711223344", "123456")
-                                },
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }
@@ -158,7 +153,6 @@ class MainActivity : ComponentActivity() {
                                 onSelectMess = { viewModel.selectMess(it) },
                                 onCreateMess = { viewModel.createMess(it) },
                                 onJoinMess = { viewModel.joinMess(it) },
-                                onLoadDemo = { viewModel.loadDemoData() },
                                 onLogout = { viewModel.logout() },
                                 modifier = Modifier.padding(innerPadding)
                             )
@@ -171,6 +165,8 @@ class MainActivity : ComponentActivity() {
                                 pendingCount = pendingCount,
                                 isBangla = isBangla,
                                 onNavigate = { viewModel.navigateTo(it) },
+                                currentMember = currentMemberProfile,
+                                onRequestRejoin = { viewModel.requestRejoin() },
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }
@@ -268,8 +264,6 @@ class MainActivity : ComponentActivity() {
                                 onAddManagedMember = { name, phone, bal ->
                                     viewModel.addManagedMember(name, phone, bal)
                                 },
-                                onResetPin = { phone -> viewModel.sendPasswordReset(phone) },
-                                onResetPinByAdmin = { member, callback -> viewModel.resetMemberPinByAdmin(member, callback) },
                                 onUpdateRole = { mId, role -> viewModel.updateMemberRole(mId, role) },
                                 onRemoveMember = { viewModel.removeMember(it) },
                                 onRegenerateCode = { viewModel.regenerateInviteCode() },

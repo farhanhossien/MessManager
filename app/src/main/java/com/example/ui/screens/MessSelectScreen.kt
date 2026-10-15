@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,7 +55,6 @@ fun MessSelectScreen(
     onSelectMess: (MessEntity) -> Unit,
     onCreateMess: (name: String) -> Unit,
     onJoinMess: (code: String) -> Unit,
-    onLoadDemo: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -143,48 +141,7 @@ fun MessSelectScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Demo Mess Card (Instant Calculations Check)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("demo_load_card"),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = AppStrings.t("load_demo", isBangla),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = if (isBangla) "৫ জন সদস্য, মিল, বাজার খরচ ও জমা সহ প্রি-লোডেড মেস" else "5 members, meals, bazar and deposit calculations preloaded",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
-                    )
-                }
-                Button(
-                    onClick = onLoadDemo,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                    modifier = Modifier.testTag("load_demo_button")
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = AppStrings.t("my_messes", isBangla),

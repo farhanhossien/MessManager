@@ -45,6 +45,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.HourglassTop
+import com.example.data.local.entities.MemberEntity
 import com.example.data.local.entities.MessEntity
 import com.example.domain.model.MessCalculationSummary
 import com.example.ui.Screen
@@ -59,6 +62,8 @@ fun DashboardScreen(
     pendingCount: Int,
     isBangla: Boolean,
     onNavigate: (Screen) -> Unit,
+    currentMember: MemberEntity? = null,
+    onRequestRejoin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -70,6 +75,119 @@ fun DashboardScreen(
             .padding(16.dp)
             .verticalScroll(scrollState)
     ) {
+        // If current member's status is REJECTED or REMOVED, show clear screen with "Request to join again"
+        if (currentMember != null && (currentMember.status == "REJECTED" || currentMember.status == "REMOVED")) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("rejected_removed_banner"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Block,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = if (isBangla) "আপনার সদস্যপদ বাতিল বা অপসারণ করা হয়েছে" else "Membership Rejected or Removed",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (isBangla) 
+                            "'${currentMess?.name ?: "মেস"}'-এ আপনার সদস্যপদ বর্তমানে সক্রিয় নয়। আপনি চাইলে পুনরায় যোগদানের জন্য অ্যাডমিনের কাছে অনুরোধ পাঠাতে পারেন।"
+                        else 
+                            "Your membership in '${currentMess?.name ?: "this mess"}' was rejected or removed. You can submit a request to join again.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onRequestRejoin,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_request_rejoin"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(
+                            text = if (isBangla) "পুনরায় যোগদানের অনুরোধ পাঠান" else "Request to join again",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { onNavigate(Screen.MessSelect) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isBangla) "অন্য মেস নির্বাচন করুন" else "Switch Mess")
+                    }
+                }
+            }
+            return
+        }
+
+        // If current member's status is PENDING, show waiting banner
+        if (currentMember != null && currentMember.status == "PENDING" && currentMess?.adminId != currentMember.userId) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pending_approval_banner"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HourglassTop,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = if (isBangla) "যোগদানের অনুরোধ অপেক্ষমান" else "Join Request Pending Approval",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (isBangla) 
+                            "'${currentMess?.name ?: "মেস"}'-এর অ্যাডমিন অনুমোদন দিলে আপনি সমস্ত হিসাব ও তথ্য দেখতে পাবেন।"
+                        else 
+                            "Waiting for '${currentMess?.name ?: "mess"}' admin approval. Once approved, you will have access to all details.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(
+                        onClick = { onNavigate(Screen.MessSelect) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isBangla) "অন্য মেস নির্বাচন করুন" else "Switch Mess")
+                    }
+                }
+            }
+            return
+        }
+
         // Pending Requests Alert Banner
         if (pendingCount > 0) {
             Card(

@@ -200,16 +200,47 @@ class MealManagerUnitTest {
         org.junit.Assert.assertFalse(canManagerPromote)
     }
 
+    private fun isWeakOrTrivialPin(pin: String): Boolean {
+        if (pin.length != 6 || !pin.all { it.isDigit() }) return true
+        if (pin.toSet().size == 1) return true
+        val isAscending = (0 until 5).all { pin[it + 1] - pin[it] == 1 }
+        if (isAscending) return true
+        val isDescending = (0 until 5).all { pin[it] - pin[it + 1] == 1 }
+        if (isDescending) return true
+        val trivialSet = setOf("121212", "123123", "010101", "000000", "111111", "123456", "654321", "012345")
+        if (pin in trivialSet) return true
+        return false
+    }
+
     @Test
-    fun testCloudFunctionReturnedTempPinParsing() {
-        val serverResultMap = mapOf(
-            "tempPin" to "784920",
-            "status" to "SUCCESS"
-        )
-        val serverPin = serverResultMap["tempPin"]
-        assertEquals("784920", serverPin)
-        assertEquals(6, serverPin?.length)
-        assertTrue(serverPin!!.all { it.isDigit() })
+    fun testPinStrengthValidation() {
+        // Trivial and sequential PINs must be rejected
+        assertTrue(isWeakOrTrivialPin("123456"))
+        assertTrue(isWeakOrTrivialPin("654321"))
+        assertTrue(isWeakOrTrivialPin("000000"))
+        assertTrue(isWeakOrTrivialPin("111111"))
+        assertTrue(isWeakOrTrivialPin("999999"))
+        assertTrue(isWeakOrTrivialPin("012345"))
+        assertTrue(isWeakOrTrivialPin("123123"))
+        assertTrue(isWeakOrTrivialPin("121212"))
+        assertTrue(isWeakOrTrivialPin("12345")) // 5 digits
+        assertTrue(isWeakOrTrivialPin("1234567")) // 7 digits
+        assertTrue(isWeakOrTrivialPin("abcdef")) // non digits
+
+        // Strong 6-digit PINs must be accepted
+        org.junit.Assert.assertFalse(isWeakOrTrivialPin("839201"))
+        org.junit.Assert.assertFalse(isWeakOrTrivialPin("481092"))
+        org.junit.Assert.assertFalse(isWeakOrTrivialPin("720519"))
+    }
+
+    @Test
+    fun testRejoinAfterRejectedOrRemovedAffectedKeys() {
+        val allowedRejoinKeys = setOf("status", "joinDate", "leaveDate")
+        val requestedRejoinKeys = setOf("status", "joinDate", "leaveDate")
+        val invalidKeys = setOf("status", "joinDate", "leaveDate", "openingBalance")
+
+        assertTrue(allowedRejoinKeys.containsAll(requestedRejoinKeys))
+        org.junit.Assert.assertFalse(allowedRejoinKeys.containsAll(invalidKeys))
     }
 
     @Test

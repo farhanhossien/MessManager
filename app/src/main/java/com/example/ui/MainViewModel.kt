@@ -281,20 +281,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentScreen.value = Screen.Auth
     }
 
-    fun sendPasswordReset(phoneOrEmail: String) {
-        viewModelScope.launch {
-            val res = repository.sendPasswordReset(phoneOrEmail)
-            res.onSuccess {
-                showSnackbar(
-                    if (_isBangla.value) "পাসওয়ার্ড রিসেট ইমেইল সফলভাবে পাঠানো হয়েছে।"
-                    else "Password reset email sent successfully."
-                )
-            }.onFailure { err ->
-                showSnackbar(err.localizedMessage ?: "Failed to send reset link")
-            }
-        }
-    }
-
     // Mess Selection & Creation
     fun selectMess(mess: MessEntity) {
         _currentMess.value = mess
@@ -439,20 +425,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun resetMemberPinByAdmin(member: MemberEntity, onResult: (String?) -> Unit) {
+    fun requestRejoin() {
+        val user = _currentUser.value ?: return
         val mess = _currentMess.value ?: return
-        val targetUid = member.userId ?: member.id
         viewModelScope.launch {
-            val res = repository.resetMemberPinByAdmin(targetUid, member.phone, mess.id)
-            res.onSuccess { tempPin ->
+            val res = repository.requestRejoin(mess.id, user.id)
+            res.onSuccess {
                 showSnackbar(
-                    if (_isBangla.value) "'${member.name}'-এর নতুন পিন: $tempPin"
-                    else "Temp PIN for '${member.name}': $tempPin"
+                    if (_isBangla.value) "পুনরায় যোগদানের অনুরোধ পাঠানো হয়েছে!"
+                    else "Rejoin request submitted successfully!"
                 )
-                onResult(tempPin)
             }.onFailure { err ->
-                showSnackbar(err.localizedMessage ?: "Failed to reset PIN")
-                onResult(null)
+                showSnackbar(
+                    if (_isBangla.value) "অনুরোধ ব্যর্থ: ${err.localizedMessage}"
+                    else "Rejoin request failed: ${err.localizedMessage}"
+                )
             }
         }
     }

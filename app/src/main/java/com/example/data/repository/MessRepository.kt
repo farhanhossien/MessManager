@@ -16,8 +16,8 @@ import com.example.domain.model.MemberCalculation
 import com.example.domain.model.MessCalculationSummary
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +65,41 @@ class MessRepository(
     // Single doc listener for PENDING membership status
     private var pendingMemberListener: ListenerRegistration? = null
 
+    fun formatFirestoreError(e: Throwable?, defaultMsg: String): String {
+        if (e == null) return defaultMsg
+        val code = (e as? FirebaseFirestoreException)?.code
+        val msg = e.localizedMessage ?: e.message ?: ""
+        return when {
+            code == FirebaseFirestoreException.Code.FAILED_PRECONDITION ||
+            msg.contains("FAILED_PRECONDITION", ignoreCase = true) ||
+            msg.contains("index", ignoreCase = true) -> {
+                "Firestore index missing - create the members.userId collection-group index"
+            }
+            code == FirebaseFirestoreException.Code.PERMISSION_DENIED ||
+            msg.contains("PERMISSION_DENIED", ignoreCase = true) -> {
+                "Permission denied: $defaultMsg"
+            }
+            code == FirebaseFirestoreException.Code.UNAVAILABLE ||
+            msg.contains("UNAVAILABLE", ignoreCase = true) ||
+            msg.contains("offline", ignoreCase = true) -> {
+                "Offline / Network unavailable: $defaultMsg"
+            }
+            else -> "$defaultMsg: $msg"
+        }
+    }
+
+    fun isWeakOrTrivialPin(pin: String): Boolean {
+        if (pin.length != 6 || !pin.all { it.isDigit() }) return true
+        if (pin.toSet().size == 1) return true // all same digit: 000000, 111111, etc.
+        val isAscending = (0 until 5).all { pin[it + 1] - pin[it] == 1 } // 012345, 123456, 234567, etc.
+        if (isAscending) return true
+        val isDescending = (0 until 5).all { pin[it] - pin[it + 1] == 1 } // 654321, 543210, etc.
+        if (isDescending) return true
+        val trivialSet = setOf("121212", "123123", "010101", "000000", "111111", "123456", "654321", "012345")
+        if (pin in trivialSet) return true
+        return false
+    }
+
     // --- Authentication with Firebase Email/Password ---
     fun phoneToEmail(phone: String): String {
         val clean = phone.trim().replace("[^0-9]".toRegex(), "")
@@ -88,12 +123,17 @@ class MessRepository(
         if (pin.length != 6) {
             return Result.failure(IllegalArgumentException("PIN must be exactly 6 digits."))
         }
+        if (isWeakOrTrivialPin(pin)) {
+            return Result.failure(IllegalArgumentException("PIN is too weak or trivial (e.g. 123456, 000000). Please choose a stronger 6-digit PIN."))
+        }
 
         val email = phoneToEmail(cleanPhone)
 
         val authResult = try {
             auth.createUserWithEmailAndPassword(email, pin.trim()).await()
         } catch (e: Exception) {
+            val errorText = formatFirestoreError(e, "Registration failed")
+            Log.e("MessRepository", errorText, e)
             return Result.failure(e)
         }
 
@@ -114,6 +154,9 @@ class MessRepository(
         try {
             firestore.collection("users").document(uid).set(user).await()
         } catch (e: Exception) {
+            val errorText = formatFirestoreError(e, "Saving user profile to Firestore failed")
+            Log.e("MessRepository", errorText, e)
+            _syncErrorEvents.tryEmit(errorText)
             return Result.failure(e)
         }
 
@@ -189,46 +232,37 @@ class MessRepository(
                                 restoredMesses.add(mess)
                             }
                         } catch (e: Exception) {
-                            Log.w("MessRepository", "Failed to fetch mess $messId: ${e.message}")
+                            val errorText = formatFirestoreError(e, "Failed to fetch mess $messId")
+                            Log.e("MessRepository", errorText, e)
+                            _syncErrorEvents.tryEmit(errorText)
                         }
                     }
                 }
             }
             Result.success(restoredMesses)
         } catch (e: Exception) {
-            Log.w("MessRepository", "restoreUserMembershipsAndMesses error: ${e.message}")
+            val errorText = formatFirestoreError(e, "restoreUserMembershipsAndMesses error")
+            Log.e("MessRepository", errorText, e)
+            _syncErrorEvents.tryEmit(errorText)
             Result.failure(e)
         }
     }
 
     suspend fun getUserById(userId: String): UserEntity? {
         var user = userDao.getUserById(userId)
-        if (user == null) {
+        val currentUid = auth.currentUser?.uid
+        if (user == null && currentUid != null && currentUid == userId) {
             try {
                 val doc = firestore.collection("users").document(userId).get().await()
                 user = doc.toObject(UserEntity::class.java)
                 if (user != null) userDao.insertUser(user)
             } catch (e: Exception) {
-                Log.w("MessRepository", "Failed to fetch user by ID: ${e.message}")
+                val errorText = formatFirestoreError(e, "Failed to fetch user by ID")
+                Log.e("MessRepository", errorText, e)
+                _syncErrorEvents.tryEmit(errorText)
             }
         }
         return user
-    }
-
-    suspend fun sendPasswordReset(phoneOrEmail: String): Result<Unit> {
-        return try {
-            val target = phoneOrEmail.trim()
-            val emailToSend = if (target.contains("@")) {
-                target
-            } else {
-                val clean = cleanPhoneNumber(target)
-                phoneToEmail(clean)
-            }
-            auth.sendPasswordResetEmail(emailToSend).await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
     }
 
     // --- Mess Operations ---
@@ -370,10 +404,12 @@ class MessRepository(
         }
 
         // 3. Check remote Firestore membership in case local Room was not in sync
+        var remoteStatus: String? = null
         try {
             val remoteMemberDoc = firestore.collection("messes").document(targetMessId)
                 .collection("members").document(userId).get().await()
             if (remoteMemberDoc.exists()) {
+                remoteStatus = remoteMemberDoc.getString("status")
                 val remoteMember = remoteMemberDoc.toObject(MemberEntity::class.java)
                 if (remoteMember != null) {
                     memberDao.insertMember(remoteMember)
@@ -385,25 +421,75 @@ class MessRepository(
                 }
             }
         } catch (e: Exception) {
-            Log.w("MessRepository", "Remote member check: ${e.message}")
+            val errorText = formatFirestoreError(e, "Remote member check failed")
+            Log.e("MessRepository", errorText, e)
+            _syncErrorEvents.tryEmit(errorText)
         }
 
-        // 4. Create new PENDING request in Firestore with doc ID = userId
-        val member = MemberEntity(
-            id = userId, // Account member uses Firebase UID as member doc id!
-            messId = targetMessId,
-            userId = userId,
-            name = userName,
-            phone = userPhone,
-            role = "MEMBER",
-            type = "ACCOUNT",
-            status = "PENDING",
-            joinDate = getTodayString(),
-            createdBy = null
-        )
-        firestore.collection("messes").document(targetMessId)
-            .collection("members").document(member.id).set(member).await()
-        memberDao.insertMember(member)
+        val existingStatus = remoteStatus ?: localMember?.status
+        if (existingStatus == "REJECTED" || existingStatus == "REMOVED") {
+            // Re-join after REJECTED/REMOVED: MUST use update() with ONLY {status: "PENDING", joinDate, leaveDate: null}
+            try {
+                val updates = hashMapOf<String, Any?>(
+                    "status" to "PENDING",
+                    "joinDate" to getTodayString(),
+                    "leaveDate" to null
+                )
+                firestore.collection("messes").document(targetMessId)
+                    .collection("members").document(userId).update(updates).await()
+
+                val updatedLocal = (localMember ?: memberDao.getMemberByMessAndUser(targetMessId, userId))?.copy(
+                    status = "PENDING",
+                    joinDate = getTodayString(),
+                    leaveDate = null
+                ) ?: MemberEntity(
+                    id = userId,
+                    messId = targetMessId,
+                    userId = userId,
+                    name = userName,
+                    phone = userPhone,
+                    role = "MEMBER",
+                    type = "ACCOUNT",
+                    status = "PENDING",
+                    joinDate = getTodayString(),
+                    leaveDate = null,
+                    openingBalance = 0.0,
+                    createdBy = null
+                )
+                memberDao.insertMember(updatedLocal)
+            } catch (e: Exception) {
+                val errorText = formatFirestoreError(e, "Failed to submit re-join request")
+                Log.e("MessRepository", errorText, e)
+                _syncErrorEvents.tryEmit(errorText)
+                return Result.failure(e)
+            }
+        } else {
+            // Fresh join: use set() with role MEMBER, type ACCOUNT, openingBalance 0, status PENDING, userId = uid
+            try {
+                val member = MemberEntity(
+                    id = userId,
+                    messId = targetMessId,
+                    userId = userId,
+                    name = userName,
+                    phone = userPhone,
+                    role = "MEMBER",
+                    type = "ACCOUNT",
+                    status = "PENDING",
+                    joinDate = getTodayString(),
+                    leaveDate = null,
+                    openingBalance = 0.0,
+                    createdBy = null
+                )
+                firestore.collection("messes").document(targetMessId)
+                    .collection("members").document(member.id).set(member).await()
+                memberDao.insertMember(member)
+            } catch (e: Exception) {
+                val errorText = formatFirestoreError(e, "Failed to join mess")
+                Log.e("MessRepository", errorText, e)
+                _syncErrorEvents.tryEmit(errorText)
+                return Result.failure(e)
+            }
+        }
 
         // 5. Read messes/{targetMessId} now that member doc exists
         try {
@@ -492,8 +578,8 @@ class MessRepository(
             .collection("members").document(userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    val msg = "Pending membership listener error: ${error.localizedMessage ?: "Sync error"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Pending membership sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -519,8 +605,8 @@ class MessRepository(
         messListener = firestore.collection("messes").document(messId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    val msg = "Mess sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Mess sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -534,8 +620,8 @@ class MessRepository(
             .collection("members")
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Members sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Members sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -553,8 +639,8 @@ class MessRepository(
             .whereLessThanOrEqualTo("date", "$month-31")
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Meals sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Meals sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -572,8 +658,8 @@ class MessRepository(
             .whereLessThanOrEqualTo("date", "$month-31")
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Bazar sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Bazar expenses sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -591,8 +677,8 @@ class MessRepository(
             .whereLessThanOrEqualTo("date", "$month-31")
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Deposits sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Deposits sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -609,8 +695,8 @@ class MessRepository(
             .whereEqualTo("month", month)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Fixed costs sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Fixed costs sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -627,8 +713,8 @@ class MessRepository(
             .whereEqualTo("month", month)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    val msg = "Closings sync error: ${error.localizedMessage ?: "Permission or sync failure"}"
-                    Log.w("MessRepository", msg)
+                    val msg = formatFirestoreError(error, "Monthly closings sync error")
+                    Log.e("MessRepository", msg, error)
                     _syncErrorEvents.tryEmit(msg)
                     return@addSnapshotListener
                 }
@@ -640,23 +726,27 @@ class MessRepository(
             }
     }
 
-    // --- Admin-Assisted PIN Reset via Cloud Function ---
-    suspend fun resetMemberPinByAdmin(targetUserId: String, targetPhone: String?, messId: String): Result<String> {
+    // --- Re-join Request for REJECTED or REMOVED Member ---
+    suspend fun requestRejoin(messId: String, userId: String): Result<Unit> {
         return try {
-            val functions = FirebaseFunctions.getInstance()
-            val data = hashMapOf(
-                "uid" to targetUserId,
-                "phone" to (targetPhone ?: ""),
-                "messId" to messId
+            val updates = hashMapOf<String, Any?>(
+                "status" to "PENDING",
+                "joinDate" to getTodayString(),
+                "leaveDate" to null
             )
-            val result = functions.getHttpsCallable("resetMemberPin").call(data).await()
-            val resultData = result.data as? Map<*, *>
-            val serverPin = resultData?.get("tempPin")?.toString()
-                ?: throw IllegalStateException("Cloud function resetMemberPin did not return a tempPin")
-            Result.success(serverPin)
+            firestore.collection("messes").document(messId)
+                .collection("members").document(userId)
+                .update(updates).await()
+
+            val localMember = memberDao.getMemberByMessAndUser(messId, userId)
+            if (localMember != null) {
+                memberDao.updateMember(localMember.copy(status = "PENDING", joinDate = getTodayString(), leaveDate = null))
+            }
+            Result.success(Unit)
         } catch (e: Exception) {
-            val msg = e.localizedMessage ?: e.message ?: "Cloud function error"
-            Log.e("MessRepository", "Cloud function resetMemberPin failed: $msg", e)
+            val errorText = formatFirestoreError(e, "Rejoin request failed")
+            Log.e("MessRepository", errorText, e)
+            _syncErrorEvents.tryEmit(errorText)
             Result.failure(e)
         }
     }

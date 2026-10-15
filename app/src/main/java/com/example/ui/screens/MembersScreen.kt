@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -75,19 +74,15 @@ fun MembersScreen(
     onApprove: (memberId: String) -> Unit,
     onReject: (memberId: String) -> Unit,
     onAddManagedMember: (name: String, phone: String?, openingBalance: Double) -> Unit,
-    onResetPin: (phone: String) -> Unit,
     onUpdateRole: (memberId: String, newRole: String) -> Unit,
     onRemoveMember: (memberId: String) -> Unit,
     onRegenerateCode: () -> Unit,
     onShowSnackbar: (String) -> Unit,
-    onResetPinByAdmin: (MemberEntity, (String?) -> Unit) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showAddManagedDialog by remember { mutableStateOf(false) }
-    var memberToResetPin by remember { mutableStateOf<MemberEntity?>(null) }
     var memberToRemove by remember { mutableStateOf<MemberEntity?>(null) }
-    var generatedTempPin by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     Column(
         modifier = modifier
@@ -359,17 +354,6 @@ fun MembersScreen(
                                     expanded = menuExpanded,
                                     onDismissRequest = { menuExpanded = false }
                                 ) {
-                                    if (member.userId != null) {
-                                        DropdownMenuItem(
-                                            text = { Text(AppStrings.t("reset_pin_title", isBangla)) },
-                                            leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
-                                            onClick = {
-                                                menuExpanded = false
-                                                memberToResetPin = member
-                                            }
-                                        )
-                                    }
-
                                     if (member.role == "MEMBER") {
                                         DropdownMenuItem(
                                             text = { Text(AppStrings.t("promote_manager", isBangla)) },
@@ -464,128 +448,6 @@ fun MembersScreen(
             dismissButton = {
                 TextButton(onClick = { showAddManagedDialog = false }) {
                     Text(if (isBangla) "বাতিল" else "Cancel")
-                }
-            }
-        )
-    }
-
-    // Firebase Password Reset & Admin-Assisted PIN Reset Dialog
-    if (memberToResetPin != null) {
-        val targetMember = memberToResetPin!!
-
-        AlertDialog(
-            onDismissRequest = { memberToResetPin = null },
-            title = { Text(if (isBangla) "পিন / পাসওয়ার্ড রিসেট - ${targetMember.name}" else "PIN / Password Reset - ${targetMember.name}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = if (isBangla) 
-                            "সদস্য: ${targetMember.name} (${targetMember.phone ?: "ফোন নেই"})\n\nআপনি অ্যাডমিন হিসেবে এই সদস্যের জন্য ক্লাউড ফাংশন দিয়ে নতুন এককালীন ৬-ডিজিট টেম্পোরারি পিন তৈরি করতে পারেন, অথবা পাসওয়ার্ড রিসেট ইমেইল পাঠাতে পারেন।"
-                        else 
-                            "Member: ${targetMember.name} (${targetMember.phone ?: "No phone"})\n\nAs Admin, you can generate a one-time 6-digit temp PIN via Cloud Function (calls Admin SDK), or send a password reset link to their verified email."
-                    )
-
-                    Button(
-                        onClick = {
-                            val target = targetMember
-                            memberToResetPin = null
-                            onResetPinByAdmin(target) { pin ->
-                                if (pin != null) {
-                                    generatedTempPin = Pair(target.name, pin)
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("btn_admin_generate_temp_pin"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(if (isBangla) "এককালীন টেম্প পিন তৈরি করুন (Admin SDK)" else "Generate One-Time Temp PIN (Admin SDK)")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            val ph = targetMember.phone
-                            if (!ph.isNullOrBlank()) {
-                                onResetPin(ph)
-                            } else {
-                                onShowSnackbar(if (isBangla) "কোনো ফোন নম্বর নেই" else "No phone number available")
-                            }
-                            memberToResetPin = null
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("confirm_reset_pin_button")
-                    ) {
-                        Text(if (isBangla) "রিসেট ইমেইল লিংক পাঠান" else "Send Reset Email Link")
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { memberToResetPin = null }) {
-                    Text(if (isBangla) "বাতিল" else "Cancel")
-                }
-            }
-        )
-    }
-
-    // Display Generated One-Time Temp PIN Dialog
-    if (generatedTempPin != null) {
-        val (memName, pin) = generatedTempPin!!
-        AlertDialog(
-            onDismissRequest = { generatedTempPin = null },
-            title = { Text(if (isBangla) "নতুন টেম্প পিন তৈরি হয়েছে!" else "Temporary PIN Generated!") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = if (isBangla)
-                            "সদস্য '$memName'-এর জন্য নতুন ওয়ান-টাইম পিন:"
-                        else
-                            "New one-time temporary PIN for '$memName':"
-                    )
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = pin,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .align(Alignment.CenterHorizontally)
-                                .testTag("generated_temp_pin_text")
-                        )
-                    }
-                    Text(
-                        text = if (isBangla)
-                            "এই ৬ ডিজিটের পিনটি সদস্যকে দিন। সদস্য এই পিন দিয়ে এখনই লগইন করতে পারবেন।"
-                        else
-                            "Share this 6-digit PIN with the member. They can log in with this PIN immediately.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("Temp PIN", pin)
-                        clipboard.setPrimaryClip(clip)
-                        onShowSnackbar(if (isBangla) "পিন ক্লিপবোর্ডে কপি হয়েছে: $pin" else "PIN copied to clipboard: $pin")
-                        generatedTempPin = null
-                    },
-                    modifier = Modifier.testTag("btn_copy_temp_pin")
-                ) {
-                    Text(if (isBangla) "কপি করুন" else "Copy PIN")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { generatedTempPin = null }) {
-                    Text(if (isBangla) "বন্ধ করুন" else "Close")
                 }
             }
         )

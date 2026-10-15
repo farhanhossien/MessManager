@@ -41,7 +41,7 @@ object AppStrings {
         "name_hint" to "যেমন: ফারহান আহমেদ",
         "btn_login" to "লগইন",
         "btn_register" to "রেজিস্টার করুন",
-        "forgot_pin_hint" to "পিন ভুলে গেছেন? আপনার মেস অ্যাডমিন নতুন পিন রিসেট করে দিতে পারবেন।",
+        "forgot_pin_hint" to "PIN ভুলে গেলে মেস অ্যাডমিনকে বলুন তাকে সরিয়ে নতুন করে যোগ করতে",
         "switch_to_register" to "নতুন ব্যবহারকারী? রেজিস্টার করুন",
         "switch_to_login" to "ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন",
         "logout" to "লগআউট",
@@ -75,7 +75,7 @@ object AppStrings {
         "member_balances" to "সদস্যদের ব্যালেন্স সামারি",
         "will_receive" to "পাবে",
         "will_give" to "দিবে (বকেয়া)",
-        "load_demo" to "ডেমো মেস লোড করুন (টেস্ট করার জন্য)",
+        "load_demo" to "ডেমো ডাটা লোড করুন (Test only)",
         "demo_loaded" to "ডেমো মেসের ডেটা সফলভাবে লোড হয়েছে!",
 
         // Meals Screen
@@ -202,7 +202,7 @@ object AppStrings {
         "name_hint" to "e.g. Farhan Ahmed",
         "btn_login" to "Sign In",
         "btn_register" to "Register",
-        "forgot_pin_hint" to "Forgot PIN? Your mess admin can reset it for you.",
+        "forgot_pin_hint" to "Forgot PIN? Ask your mess admin to remove and re-add you.",
         "switch_to_register" to "New user? Create account",
         "switch_to_login" to "Already have an account? Sign in",
         "logout" to "Log Out",
@@ -236,7 +236,7 @@ object AppStrings {
         "member_balances" to "Member Balances",
         "will_receive" to "Receivable",
         "will_give" to "Due",
-        "load_demo" to "Load Demo Mess (For Instant Testing)",
+        "load_demo" to "Load demo data (Test only)",
         "demo_loaded" to "Demo Mess loaded successfully!",
 
         // Meals Screen
